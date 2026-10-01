@@ -1,0 +1,105 @@
+# LMS Kampus — local stack
+# Catatan: Docker tidak tersedia di WSL saat ini, file ini untuk dijalankan
+# saat Docker Desktop integration aktif / di VPS kampus.
+# Native Postgres 16 di host sudah dipakai untuk dev (127.0.0.1:5432).
+# Jika pakai compose pgsql, matikan native dulu ATAU ubah ports ke 5433.
+
+name: lms-kampus
+
+services:
+  pgsql:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lms_kampus
+      POSTGRES_USER: lms
+      POSTGRES_PASSWORD: lms_secret_local
+    ports:
+      - "5433:5432" # 5433 agar tidak tabrakan dengan native 5432; ubah ke 5432:5432 bila native mati
+    volumes:
+      - pgsql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lms -d lms_kampus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin-local
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    command:
+      - -n
+      - --log-file=stdout
+      - --realm=lms-kampus
+      - --user=lms:lms-turn-local
+      - --min-port=49160
+      - --max-port=49200
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/udp"
+    network_mode: host
+    profiles: ["webrtc"] # butuh host network untuk TURN; jalankan: docker compose --profile webrtc up coturn
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880" # WebSocket/RTC signaling
+      - "7881:7881" # RTC TCP
+      - "7882:7882/udp" # RTC UDP
+    volumes:
+      - ./docker/livekit.yaml:/etc/livekit.yaml:ro
+    environment:
+      LIVEKIT_KEYS: "devkey: devsecret-local-ganti-di-prod-2026-lms"
+    depends_on:
+      - redis
+    profiles: ["webrtc"]
+
+  egress:
+    image: livekit/egress:latest
+    restart: unless-stopped
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./docker/egress.yaml:/etc/egress.yaml:ro
+    depends_on:
+      - livekit
+    profiles: ["webrtc"]
+
+volumes:
+  pgsql-data:
+  redis-data:
+  minio-data:

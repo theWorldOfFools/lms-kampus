@@ -1,0 +1,34 @@
+# LiveKit SFU — config lokal LMS Kampus
+# Docs: https://docs.livekit.io/home/self-hosting/local/
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  # Untuk 100+ peserta di LAN kampus, naikkan port range via use_external_ip + coturn.
+  # use_external_ip: false  # set true di VPS dengan IP publik
+
+  # ICE lite / full? default full. Biarkan default untuk lokal.
+
+room:
+  empty_timeout: 300
+  max_participants: 150 # target kuliah besar 100+
+
+turn:
+  enabled: true
+  tls_port: 5349
+  udp_port: 3478
+  external_tls: false
+  # Kredensial TURN harus sama dengan service coturn di docker-compose.yml
+  # coturn dipakai sebagai TURN eksternal; LiveKit built-in TURN juga aktif.
+
+keys:
+  devkey: devsecret-local-ganti-di-prod-2026-lms
+
+redis:
+  address: redis:6379
+
+logging:
+  level: info
